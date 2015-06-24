@@ -80,9 +80,10 @@ def Backup():
             if entry:
                 file.write(entry.group(1) + '\n')
     file.close()
-    scheduler.add_job(Backup, 'interval', hours=1)
 
 
+#run once before starting the scheduler
+Backup()
 scheduler.add_job(Backup, 'interval', hours=1)
 print('Press Ctrl+{0} to exit'.format('Break' if os.name == 'nt' else 'C'))
 try:
