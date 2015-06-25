@@ -1,37 +1,31 @@
 """
-	Program: 	Gigasetlogs
-	Use:	 	read the logs of a gigaset router and save it to a log file.
+	Program: 	Gigasetlogs2
+	Use:	 	read the logs of a gigaset router and save it to log
+                        file, using sockets instead of urllib to connect.
 	Author:		KoalaTea
 """
-#complete? Might comeback at a later point if I feel anything should be added
-#or removed
 
-import sys,urllib.request,re
+
+import socket
 import os.path
+import re
 from apscheduler.schedulers.blocking import BlockingScheduler
 
-
-#set up the scheduler to run every hour
+#setup
+request = b"GET /syslogshow.htm HTTP/1.1\r\n\r\n"
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 scheduler = BlockingScheduler()
 
-#setting up and grabbing the data
-J="http://192.168.254.254/syslogshow.htm"
-A=urllib.request.urlopen(J)
-AB=A.read()
-
-'''
-Backup()
-the main logic of the program
-
-Creates a Backup file of the logs if a backup file does not exist.
-if a file does exist itchecks if the logs have any new entries
-and if it does it appends them to the end of the file
-'''
 def Backup():
-    #consistently open and grab new data with each call of Backup()
-    A=urllib.request.urlopen(J)
-    AB=A.read()
-    A.close()
+    #gathering new data every call
+    s.connect(("192.168.254.254", 80))
+    s.send(request)
+    result = s.recv(10000)
+    string = '' #AB in gigasetlogs.py
+    while result:
+        string = string + str(result)
+        result = s.recv(10000)
+    s.close()
     
     #check if GigasetBackup exists
     if os.path.exists('GigasetBackup.txt'):
@@ -43,7 +37,7 @@ def Backup():
 
         #open backup and add to the end of backupfile any new entries
         file = open('GigasetBackup.txt', 'a')
-        data=str(AB).split('<TR>')
+        data=string.split('<TR>')
         new=0;
         for line in data:
             entry = re.search(r'<pre>(.*)</pre>',line,flags=0)
@@ -55,8 +49,18 @@ def Backup():
             
                 #checking dates for newer entry by concat yearmonthdayhourminsec
                 #and then comparing
-                newentryj = newentry[2] + newentry[0] + newentry[1] + newentry[3]
-                newentryj = newentryj + newentry[4] + newentry[5]
+                #because of the difference from gigasetlogs.py newentry[0]
+                #sometimes has a 'b'.... no idea why workaround in the code
+                if len(newentry[0]) > 2:
+                    new = re.search(r'\D*(\d*)\D*',newentry[1],flags=0)
+                    newentry[1] = new.group(1)
+                    newentryj = newentry[2] + newentry[0] + newentry[1]
+                    newentryj = newentryj + newentry[3] + newentry[4]
+                    newentryj = newentryj + newentry[5]
+                else:
+                    newentryj = newentry[2] + newentry[0] + newentry[1]
+                    newentryj = newentryj + newentry[3] + newentry[4]
+                    newentryj = newentryj + newentry[5]
                 lastentryj = lastentrysp[2] + lastentrysp[0] + lastentrysp[1]
                 lastentryj = lastentryj + lastentrysp[3] + lastentrysp[4]
                 lastentryj = lastentryj + lastentrysp[5]
@@ -65,7 +69,7 @@ def Backup():
                     file.write(entry.group(1) + '\n')
     else:
         file = open('GigasetBackup.txt', 'w')
-        data=str(AB).split('<TR>')
+        data=string.split('<TR>')
         new=0;
         for line in data:
             entry = re.search(r'<pre>(.*)</pre>',line,flags=0)
@@ -82,3 +86,6 @@ try:
     scheduler.start()
 except (KeyboardInterrupt, SystemExit):
     raise
+
+
+
